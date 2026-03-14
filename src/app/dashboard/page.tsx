@@ -1314,9 +1314,9 @@ function PmoView({uid}:{uid:string}) {
   useEffect(()=>{load();},[load]);
 
   async function start(){
-    const d:PmoData={current_day:0,streak_start:today(),is_broken:false,milestone_reached:[]};
+    const d={current_day:0,streak_start:today(),is_broken:false,milestone_reached:[] as number[]};
     const row=await apiPost(uid,"pmo","create",d as unknown as Record<string,unknown>,0);
-    if(row){setPmoId(row.id);setPmo(d);}
+    if(row){setPmoId(row.id);setPmo({...d,id:row.id});}
   }
   async function checkin(){
     if(!pmo||!pmoId) return;
@@ -1324,16 +1324,16 @@ function PmoView({uid}:{uid:string}) {
     const newM=[...pmo.milestone_reached];
     if(PMO_MILESTONES.includes(newDay)&&!newM.includes(newDay)) newM.push(newDay);
     const exp=PMO_MILESTONES.includes(newDay)?newDay*10:5;
-    const updated:PmoData={...pmo,current_day:newDay,milestone_reached:newM};
+    const updated={...pmo,current_day:newDay,milestone_reached:newM};
     await apiPatch(pmoId,uid,"checkin",updated as unknown as Record<string,unknown>);
     if(exp>5) await apiPost(uid,"pmo","log",{milestone:newDay,exp},exp);
     setPmo(updated);
   }
   async function reset(){
     if(!pmoId||!pmo) return;
-    const r:PmoData={current_day:0,streak_start:today(),is_broken:true,milestone_reached:[]};
+    const r={current_day:0,streak_start:today(),is_broken:true,milestone_reached:[] as number[]};
     await apiPatch(pmoId,uid,"reset",r as unknown as Record<string,unknown>);
-    setPmo(r); setConfirming(false);
+    setPmo({...r,id:pmoId}); setConfirming(false);
   }
 
   if(loading) return <div className="space-y-4"><Sk cls="h-48"/><Sk cls="h-64"/></div>;
