@@ -6,7 +6,11 @@ export const metadata: Metadata = {
   description: "Your life. Your system. Your rules.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="id">
       <body>{children}</body>

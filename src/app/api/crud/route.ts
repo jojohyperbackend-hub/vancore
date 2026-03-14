@@ -1,46 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// ─── Supabase client (inline biar tidak ada import issue) ────────────────────
+// ─── Supabase client ──────────────────────────────────────────────────────────
 function getClient() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || url.trim() === "") {
-    throw new Error("SUPABASE_URL missing dari .env.local");
-  }
-  if (!key || key.trim() === "") {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY missing dari .env.local");
-  }
-
+  if (!url || url.trim() === "") throw new Error("SUPABASE_URL missing");
+  if (!key || key.trim() === "") throw new Error("SUPABASE_SERVICE_ROLE_KEY missing");
   return createClient(url.trim(), key.trim(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
 
-// ─── EXP map ─────────────────────────────────────────────────────────────────
+// ─── EXP map ──────────────────────────────────────────────────────────────────
 const EXP: Record<string, Record<string, number>> = {
-  character:  { create: 0,  update: 0                             },
-  quest:      { create: 5,  complete: 80, fail: -30, update: 2    },
-  mission:    { create: 5,  complete: 150, update: 2              },
-  battle:     { create: 5,  complete: 50, fail: -10, update: 2    },
-  skill:      { create: 5,  log: 15, update: 2                    },
-  habit:      { create: 5,  checkin: 20, update: 2                },
-  task:       { create: 3,  complete: 15, update: 1               },
-  finance:    { create: 3,  update: 1                             },
-  sleep:      { create: 10, update: 2                             },
-  mental:     { create: 5,  checkin: 5, log: 0, update: 2         },
-  social:     { create: 5,  log: 8, update: 2                     },
-  pmo:        { create: 0,  checkin: 5, reset: 0, log: 0          },
-  school:     { create: 5,  complete: 30, update: 2               },
-  book:       { create: 3,  complete: 40, update: 2               },
-  anime:      { create: 2,  complete: 15, update: 1               },
-  manga:      { create: 2,  complete: 15, update: 1               },
-  job:        { create: 5,  update: 2, advance: 5                 },
-  stock:      { create: 3,  update: 1                             },
-  crypto:     { create: 3,  update: 1                             },
-  buy:        { create: 2,  update: 1                             },
-  evaluation: { create: 10, update: 3                             },
+  character:  { create: 0,   update: 0                          },
+  quest:      { create: 5,   complete: 80,  fail: -30, update: 2 },
+  mission:    { create: 5,   complete: 150, update: 2            },
+  battle:     { create: 5,   complete: 50,  fail: -10, update: 2 },
+  skill:      { create: 5,   log: 15,       update: 2            },
+  habit:      { create: 5,   checkin: 20,   update: 2            },
+  task:       { create: 3,   complete: 15,  update: 1            },
+  finance:    { create: 3,   update: 1                           },
+  sleep:      { create: 10,  update: 2                           },
+  mental:     { create: 5,   checkin: 5,    log: 0,   update: 2  },
+  social:     { create: 5,   log: 8,        update: 2            },
+  pmo:        { create: 0,   checkin: 5,    reset: 0, log: 0     },
+  school:     { create: 5,   complete: 30,  update: 2            },
+  book:       { create: 3,   complete: 40,  update: 2            },
+  anime:      { create: 2,   complete: 15,  update: 1            },
+  manga:      { create: 2,   complete: 15,  update: 1            },
+  job:        { create: 5,   update: 2,     advance: 5           },
+  stock:      { create: 3,   update: 1                           },
+  crypto:     { create: 3,   update: 1                           },
+  buy:        { create: 2,   update: 1                           },
+  evaluation: { create: 10,  update: 3                           },
 };
 
 function getExp(module: string, action: string): number {
@@ -55,20 +49,18 @@ interface PostBody {
   data: Record<string, unknown>;
   exp_gained?: number;
 }
-
 interface PatchBody {
   id: string;
   user_id: string;
   action?: string;
   data?: Record<string, unknown>;
 }
-
 interface DeleteBody {
   id: string;
   user_id: string;
 }
 
-// ─── GET ─────────────────────────────────────────────────────────────────────
+// ─── GET ──────────────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
     const sb = getClient();
@@ -84,7 +76,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "user_id wajib diisi" }, { status: 400 });
     }
 
-    // Single row by id
     if (id) {
       const { data, error } = await sb
         .from("vancore")
@@ -92,15 +83,13 @@ export async function GET(req: NextRequest) {
         .eq("id", id)
         .eq("user_id", user_id)
         .single();
-
       if (error) {
-        console.error("[GET single]", error);
+        console.error("[GET single]", error.message);
         return NextResponse.json({ error: error.message }, { status: 404 });
       }
       return NextResponse.json({ data });
     }
 
-    // List — filter by module if provided
     let query = sb
       .from("vancore")
       .select("*", { count: "exact" })
@@ -111,13 +100,9 @@ export async function GET(req: NextRequest) {
     if (module) query = query.eq("module", module);
 
     const { data, error, count } = await query;
-
     if (error) {
       console.error("[GET list]", error.message, error.details, error.hint);
-      return NextResponse.json(
-        { error: error.message, details: error.details, hint: error.hint },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ data: data ?? [], count: count ?? 0 });
@@ -134,24 +119,16 @@ export async function POST(req: NextRequest) {
   try {
     const sb = getClient();
     let body: PostBody;
-
-    try {
-      body = await req.json();
-    } catch {
-      return NextResponse.json({ error: "Body JSON tidak valid" }, { status: 400 });
-    }
+    try { body = await req.json(); }
+    catch { return NextResponse.json({ error: "Body JSON tidak valid" }, { status: 400 }); }
 
     const { user_id, module, action, data, exp_gained } = body;
 
     if (!user_id || !module || !action) {
-      return NextResponse.json(
-        { error: "user_id, module, action wajib diisi" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "user_id, module, action wajib diisi" }, { status: 400 });
     }
-
     if (!data || typeof data !== "object") {
-      return NextResponse.json({ error: "data harus berupa object" }, { status: 400 });
+      return NextResponse.json({ error: "data harus object" }, { status: 400 });
     }
 
     const exp = exp_gained !== undefined ? exp_gained : getExp(module, action);
@@ -163,17 +140,12 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
-      console.error("[POST insert]", error.message, error.details, error.hint);
-      return NextResponse.json(
-        { error: error.message, details: error.details, hint: error.hint },
-        { status: 500 }
-      );
+      console.error("[POST]", error.message, error.details, error.hint);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     if (exp !== 0) {
-      updateCharacterExp(sb, user_id, exp).catch((e) =>
-        console.error("[POST EXP]", e)
-      );
+      updateCharacterExp(user_id, exp).catch(e => console.error("[POST EXP]", e));
     }
 
     return NextResponse.json({ data: inserted }, { status: 201 });
@@ -190,12 +162,8 @@ export async function PATCH(req: NextRequest) {
   try {
     const sb = getClient();
     let body: PatchBody;
-
-    try {
-      body = await req.json();
-    } catch {
-      return NextResponse.json({ error: "Body JSON tidak valid" }, { status: 400 });
-    }
+    try { body = await req.json(); }
+    catch { return NextResponse.json({ error: "Body JSON tidak valid" }, { status: 400 }); }
 
     const { id, user_id, action, data } = body;
 
@@ -206,7 +174,6 @@ export async function PATCH(req: NextRequest) {
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
-
     if (action) updates.action = action;
     if (data && typeof data === "object") updates.data = data;
 
@@ -219,14 +186,12 @@ export async function PATCH(req: NextRequest) {
         .single();
 
       if (!fetchErr && existing) {
-        const newExp = getExp(existing.module as string, action);
-        const oldExp = (existing.exp_gained as number) ?? 0;
-        const delta  = newExp - oldExp;
+        const newExp  = getExp(existing.module as string, action);
+        const oldExp  = (existing.exp_gained as number) ?? 0;
+        const delta   = newExp - oldExp;
         updates.exp_gained = newExp;
         if (delta !== 0) {
-          updateCharacterExp(sb, user_id, delta).catch((e) =>
-            console.error("[PATCH EXP delta]", e)
-          );
+          updateCharacterExp(user_id, delta).catch(e => console.error("[PATCH EXP]", e));
         }
       }
     }
@@ -241,10 +206,7 @@ export async function PATCH(req: NextRequest) {
 
     if (error) {
       console.error("[PATCH]", error.message, error.details);
-      return NextResponse.json(
-        { error: error.message, details: error.details },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ data: updated });
@@ -261,15 +223,10 @@ export async function DELETE(req: NextRequest) {
   try {
     const sb = getClient();
     let body: DeleteBody;
-
-    try {
-      body = await req.json();
-    } catch {
-      return NextResponse.json({ error: "Body JSON tidak valid" }, { status: 400 });
-    }
+    try { body = await req.json(); }
+    catch { return NextResponse.json({ error: "Body JSON tidak valid" }, { status: 400 }); }
 
     const { id, user_id } = body;
-
     if (!id || !user_id) {
       return NextResponse.json({ error: "id dan user_id wajib diisi" }, { status: 400 });
     }
@@ -294,9 +251,7 @@ export async function DELETE(req: NextRequest) {
 
     const exp = (existing?.exp_gained as number) ?? 0;
     if (exp > 0) {
-      updateCharacterExp(sb, user_id, -exp).catch((e) =>
-        console.error("[DELETE EXP rollback]", e)
-      );
+      updateCharacterExp(user_id, -exp).catch(e => console.error("[DELETE EXP]", e));
     }
 
     return NextResponse.json({ success: true });
@@ -308,12 +263,10 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
-// ─── Character EXP updater ────────────────────────────────────────────────────
-async function updateCharacterExp(
-  sb: ReturnType<typeof createClient>,
-  user_id: string,
-  delta: number
-) {
+// ─── Character EXP — buat client sendiri, tidak terima sb sebagai param ──────
+async function updateCharacterExp(user_id: string, delta: number): Promise<void> {
+  const sb = getClient();
+
   const { data: existing, error } = await sb
     .from("vancore")
     .select("id, data")
@@ -324,7 +277,6 @@ async function updateCharacterExp(
     .single();
 
   if (error || !existing) {
-    const initialExp = Math.max(0, delta);
     await sb.from("vancore").insert({
       user_id,
       module: "character",
@@ -333,7 +285,7 @@ async function updateCharacterExp(
       data: {
         level: 1,
         rank: "F",
-        total_exp: initialExp,
+        total_exp: Math.max(0, delta),
         stats: {
           vitality: 10, focus: 10, intelligence: 10,
           discipline: 10, social: 10, wealth: 10, willpower: 10,
