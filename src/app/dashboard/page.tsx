@@ -34,7 +34,7 @@ interface PmoData { id:string; current_day:number; streak_start:string; is_broke
 interface SocialLink { id:string; name:string; level:number; last_interaction?:string; total_interactions:number; }
 interface SocialLog { id:string; link_id:string; link_name:string; type:string; topic:string; note?:string; date:string; }
 interface SchoolItem { id:string; type:"assignment"|"exam"|"goal"|"note"; title:string; due?:string; status:"todo"|"done"; subject?:string; content?:string; }
-interface BookEntry { id:string; title:string; author?:string; type:"book"|"article"|"paper"; status:"want"|"reading"|"done"|"dropped"; review?:string; }
+interface BookEntry { id:string; title:string; author?:string; type:"book"|"article"|"paper"; status:"want"|"reading"|"done"|"dropped"; review?:string; total_pages?:number; current_page?:number; total_chapters?:number; current_chapter?:number; insights:string[]; }
 interface AnimeEntry { id:string; title:string; type:"anime"|"manga"; status:"watching"|"reading"|"onhold"|"completed"|"dropped"|"plan"; progress:number; total?:number; }
 interface JobEntry { id:string; company:string; position:string; status:"applied"|"screening"|"interview"|"offer"|"accepted"|"rejected"; applied_at:string; note?:string; }
 interface StockEntry { id:string; ticker:string; name:string; type:"stock"|"bond"|"money_market"; buy_price:number; current_price:number; qty:number; note?:string; }
@@ -1611,59 +1611,141 @@ function SchoolView({uid}:{uid:string}) {
 // BOOK / LITERACY
 // ════════════════════════════════════════════════════════════
 function BookView({uid}:{uid:string}) {
-  const [books,setBooks]=useState<BookEntry[]>([]);
-  const [loading,setLoading]=useState(true);
-  const [title,setTitle]=useState(""); const [author,setAuthor]=useState("");
-  const [type,setType]=useState<BookEntry["type"]>("book");
-  const [status,setStatus]=useState<BookEntry["status"]>("want");
-  const [review,setReview]=useState(""); const [adding,setAdding]=useState(false);
-  const [reviewingId,setReviewingId]=useState<string|null>(null);
+  const [books,setBooks]       = useState<BookEntry[]>([]);
+  const [loading,setLoading]   = useState(true);
+  const [expanded,setExpanded] = useState<string|null>(null);
 
-  const load=useCallback(async()=>{
+  // add form
+  const [title,setTitle]     = useState("");
+  const [author,setAuthor]   = useState("");
+  const [bType,setBType]     = useState<BookEntry["type"]>("book");
+  const [bStatus,setBStatus] = useState<BookEntry["status"]>("want");
+  const [totPages,setTotPages]     = useState("");
+  const [totChaps,setTotChaps]     = useState("");
+  const [adding,setAdding]   = useState(false);
+
+  // inline progress edit — per book, keyed by id
+  const [pageVal,setPageVal]   = useState<Record<string,string>>({});
+  const [chapVal,setChapVal]   = useState<Record<string,string>>({});
+
+  // insight / review
+  const [insightText,setInsightText]   = useState("");
+  const [insightingId,setInsightingId] = useState<string|null>(null);
+  const [reviewText,setReviewText]     = useState("");
+  const [reviewingId,setReviewingId]   = useState<string|null>(null);
+
+  const load = useCallback(async()=>{
     setLoading(true);
-    const rows=await apiGet(uid,"book",100);
-    setBooks(rows.map(r=>({id:r.id,title:String(r.data.title??""),author:r.data.author as string|undefined,
-      type:(r.data.type??"book") as BookEntry["type"],status:(r.data.status??"want") as BookEntry["status"],
-      review:r.data.review as string|undefined})));
+    const rows = await apiGet(uid,"book",100);
+    setBooks(rows.map(r=>({
+      id:             r.id,
+      title:          String(r.data.title??""),
+      author:         r.data.author   as string|undefined,
+      type:           (r.data.type    ?? "book")  as BookEntry["type"],
+      status:         (r.data.status  ?? "want")  as BookEntry["status"],
+      review:         r.data.review   as string|undefined,
+      total_pages:    r.data.total_pages    as number|undefined,
+      current_page:   r.data.current_page   as number|undefined,
+      total_chapters: r.data.total_chapters as number|undefined,
+      current_chapter:r.data.current_chapter as number|undefined,
+      insights:       (r.data.insights as string[])||[],
+    })));
     setLoading(false);
   },[uid]);
-  useEffect(()=>{load();},[load]);
+  useEffect(()=>{ load(); },[load]);
 
+  // ── ADD ──────────────────────────────────────────────────
   async function add(){
-    if(!title.trim()) return; setAdding(true);
-    const row=await apiPost(uid,"book","create",{title:title.trim(),author:author.trim()||null,type,status},3);
-    if(row) setBooks(p=>[{id:row.id,title:title.trim(),author:author.trim()||undefined,type,status},...p]);
-    setTitle(""); setAuthor(""); setAdding(false);
+    if(!title.trim()) return;
+    setAdding(true);
+    const row = await apiPost(uid,"book","create",{
+      title:title.trim(), author:author.trim()||null, type:bType, status:bStatus,
+      total_pages:    totPages ? Number(totPages) : null,
+      total_chapters: totChaps ? Number(totChaps) : null,
+      current_page:0, current_chapter:0, insights:[],
+    },3);
+    if(row) setBooks(p=>[{
+      id:row.id, title:title.trim(), author:author.trim()||undefined,
+      type:bType, status:bStatus,
+      total_pages:    totPages ? Number(totPages) : undefined,
+      total_chapters: totChaps ? Number(totChaps) : undefined,
+      current_page:0, current_chapter:0, insights:[],
+    },...p]);
+    setTitle(""); setAuthor(""); setTotPages(""); setTotChaps("");
+    setAdding(false);
   }
-  async function updateStatus(b:BookEntry,newStatus:BookEntry["status"]){
-    const exp=newStatus==="done"?40:2;
-    await apiPatch(b.id,uid,newStatus==="done"?"complete":"update",{...b,status:newStatus});
-    setBooks(p=>p.map(x=>x.id===b.id?{...x,status:newStatus}:x));
-  }
-  async function saveReview(b:BookEntry){
-    await apiPatch(b.id,uid,"update",{...b,review:review.trim()});
-    setBooks(p=>p.map(x=>x.id===b.id?{...x,review:review.trim()}:x));
-    setReviewingId(null); setReview("");
-  }
-  async function del(id:string){if(await apiDelete(id,uid)) setBooks(p=>p.filter(x=>x.id!==id));}
 
-  const STATUS_ORDER:BookEntry["status"][] = ["reading","want","done","dropped"];
+  // ── STATUS ────────────────────────────────────────────────
+  async function changeStatus(b:BookEntry, ns:BookEntry["status"]){
+    const action = ns==="done" ? "complete" : "update";
+    await apiPatch(b.id, uid, action, {...b, status:ns});
+    setBooks(p=>p.map(x=>x.id===b.id?{...x,status:ns}:x));
+  }
+
+  // ── PROGRESS (halaman / bab) ──────────────────────────────
+  async function saveProgress(b:BookEntry){
+    const rawPg = pageVal[b.id];
+    const rawCh = chapVal[b.id];
+    const pg = rawPg !== undefined ? Number(rawPg) : (b.current_page??0);
+    const ch = rawCh !== undefined ? Number(rawCh) : (b.current_chapter??0);
+    const done =
+      (b.total_pages    && b.total_pages    > 0 && pg >= b.total_pages) ||
+      (b.total_chapters && b.total_chapters > 0 && ch >= b.total_chapters);
+    const ns:BookEntry["status"] = done ? "done" : b.status;
+    await apiPatch(b.id, uid, done?"complete":"update", {
+      ...b, current_page:pg, current_chapter:ch, status:ns,
+    });
+    setBooks(p=>p.map(x=>x.id===b.id?{...x,current_page:pg,current_chapter:ch,status:ns}:x));
+    // clear local draft
+    setPageVal(v=>{ const n={...v}; delete n[b.id]; return n; });
+    setChapVal(v=>{ const n={...v}; delete n[b.id]; return n; });
+  }
+
+  // ── INSIGHT ───────────────────────────────────────────────
+  async function addInsight(b:BookEntry){
+    if(!insightText.trim()) return;
+    const ni=[...(b.insights??[]), insightText.trim()];
+    await apiPatch(b.id,uid,"update",{...b,insights:ni});
+    setBooks(p=>p.map(x=>x.id===b.id?{...x,insights:ni}:x));
+    setInsightText(""); setInsightingId(null);
+  }
+  async function removeInsight(b:BookEntry,idx:number){
+    const ni=b.insights.filter((_,i)=>i!==idx);
+    await apiPatch(b.id,uid,"update",{...b,insights:ni});
+    setBooks(p=>p.map(x=>x.id===b.id?{...x,insights:ni}:x));
+  }
+
+  // ── REVIEW ────────────────────────────────────────────────
+  async function saveReview(b:BookEntry){
+    await apiPatch(b.id,uid,"update",{...b,review:reviewText.trim()});
+    setBooks(p=>p.map(x=>x.id===b.id?{...x,review:reviewText.trim()}:x));
+    setReviewingId(null); setReviewText("");
+  }
+
+  async function del(id:string){
+    if(await apiDelete(id,uid)) setBooks(p=>p.filter(x=>x.id!==id));
+  }
+
+  const ALL_STATUS:BookEntry["status"][] = ["reading","want","done","dropped"];
 
   return (
     <div className="space-y-5">
+
+      {/* ── Add form ── */}
       <Card>
-        <h3 className="font-bold text-stone-800 text-sm mb-3">Tambah Buku/Konten</h3>
+        <h3 className="font-bold text-stone-800 text-sm mb-3">Tambah Buku / Konten</h3>
         <div className="space-y-2">
-          <Input value={title} onChange={setTitle} placeholder="Judul..."/>
-          <Input value={author} onChange={setAuthor} placeholder="Penulis/Sumber (opsional)"/>
+          <Input value={title} onChange={setTitle} placeholder="Judul..."
+            onKeyDown={e=>e.key==="Enter"&&add()}/>
+          <Input value={author} onChange={setAuthor} placeholder="Penulis / Sumber (opsional)"/>
           <div className="flex gap-2">
-            <select value={type} onChange={e=>setType(e.target.value as BookEntry["type"])}
+            <select value={bType} onChange={e=>setBType(e.target.value as BookEntry["type"])}
               className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-600 outline-none">
               <option value="book">📚 Buku</option>
               <option value="article">📄 Artikel</option>
               <option value="paper">🔬 Paper</option>
             </select>
-            <select value={status} onChange={e=>setStatus(e.target.value as BookEntry["status"])}
+            <select value={bStatus} onChange={e=>setBStatus(e.target.value as BookEntry["status"])}
               className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-600 outline-none">
               <option value="want">Want</option>
               <option value="reading">Reading</option>
@@ -1671,46 +1753,263 @@ function BookView({uid}:{uid:string}) {
               <option value="dropped">Dropped</option>
             </select>
           </div>
-          <Btn onClick={add} disabled={adding||!title.trim()} className="w-full">{adding?"...":"+ Tambah"}</Btn>
+          {bType==="book"&&(
+            <div className="flex gap-2">
+              <Input value={totPages} onChange={setTotPages}
+                placeholder="Total halaman (opsional)" type="number" className="flex-1"/>
+              <Input value={totChaps} onChange={setTotChaps}
+                placeholder="Total bab (opsional)" type="number" className="flex-1"/>
+            </div>
+          )}
+          <Btn onClick={add} disabled={adding||!title.trim()} className="w-full">
+            {adding?"...":"+ Tambah"}
+          </Btn>
         </div>
       </Card>
-      {loading?<Sk cls="h-40"/>:books.length===0?<Empty icon="◪" text="Belum ada buku atau konten."/>
-      :STATUS_ORDER.map(s=>{const filtered=books.filter(b=>b.status===s);return filtered.length>0&&(
-        <Card key={s}>
-          <div className="flex items-center gap-2 mb-3">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(s)}`}>{s}</span>
-            <span className="text-stone-300 text-xs">{filtered.length}</span>
-          </div>
-          <div className="space-y-3">
-            {filtered.map(b=>(
-              <div key={b.id}>
-                <div className="flex items-start gap-3">
-                  <div className="flex-1">
-                    <p className="text-stone-700 text-sm font-medium">{b.title}</p>
-                    {b.author&&<p className="text-stone-400 text-xs">{b.author} · {b.type}</p>}
-                    {b.review&&<p className="text-stone-400 text-xs mt-1 italic">"{b.review}"</p>}
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    {s==="reading"&&<Btn onClick={()=>updateStatus(b,"done")} variant="secondary" small>Done</Btn>}
-                    {s==="done"&&!b.review&&<Btn onClick={()=>{setReviewingId(b.id);setReview("");}} variant="secondary" small>Review</Btn>}
-                    <Btn onClick={()=>del(b.id)} variant="ghost" small>✕</Btn>
-                  </div>
-                </div>
-                {reviewingId===b.id&&(
-                  <div className="mt-2 space-y-2">
-                    <textarea value={review} onChange={e=>setReview(e.target.value)} placeholder="Tulis review singkat..." rows={2}
-                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm text-stone-700 placeholder-stone-300 outline-none resize-none"/>
-                    <div className="flex gap-2">
-                      <Btn onClick={()=>saveReview(b)} small>Simpan</Btn>
-                      <Btn onClick={()=>setReviewingId(null)} variant="ghost" small>Batal</Btn>
-                    </div>
-                  </div>
-                )}
+
+      {/* ── Stats ── */}
+      {books.length>0&&(
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            {l:"Total",   v:books.length,                                    c:"text-stone-700"},
+            {l:"Reading", v:books.filter(b=>b.status==="reading").length,    c:"text-violet-600"},
+            {l:"Done",    v:books.filter(b=>b.status==="done").length,       c:"text-emerald-500"},
+            {l:"Want",    v:books.filter(b=>b.status==="want").length,       c:"text-stone-400"},
+          ].map(s=>(
+            <div key={s.l} className="bg-white rounded-2xl p-3 border border-stone-200/80 text-center">
+              <p className={`font-black text-xl leading-none mb-0.5 ${s.c}`}>{s.v}</p>
+              <p className="text-stone-400 text-xs">{s.l}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── List ── */}
+      {loading ? <Sk cls="h-40"/>
+      : books.length===0 ? <Empty icon="◪" text="Belum ada buku atau konten."/>
+      : ALL_STATUS.map(s=>{
+          const filtered = books.filter(b=>b.status===s);
+          if(!filtered.length) return null;
+          return (
+            <Card key={s}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(s)}`}>{s}</span>
+                <span className="text-stone-300 text-xs">{filtered.length}</span>
               </div>
-            ))}
-          </div>
-        </Card>
-      );})}
+              <div className="space-y-2">
+                {filtered.map(b=>{
+                  const isExp   = expanded===b.id;
+                  const hasPg   = !!(b.total_pages    && b.total_pages    > 0);
+                  const hasCh   = !!(b.total_chapters && b.total_chapters > 0);
+                  const curPg   = pageVal[b.id] !== undefined ? Number(pageVal[b.id])  : (b.current_page??0);
+                  const curCh   = chapVal[b.id] !== undefined ? Number(chapVal[b.id])  : (b.current_chapter??0);
+                  const pctPg   = hasPg ? Math.min((curPg / b.total_pages!)  * 100, 100) : 0;
+                  const pctCh   = hasCh ? Math.min((curCh / b.total_chapters!)* 100, 100) : 0;
+                  const pct     = hasPg ? pctPg : hasCh ? pctCh : 0;
+                  const showBar = (hasPg||hasCh) && b.type!=="article";
+
+                  return (
+                    <div key={b.id} className="border border-stone-100 rounded-2xl overflow-hidden">
+
+                      {/* ── Header (tap to expand) ── */}
+                      <div
+                        className="flex items-start gap-3 p-3 cursor-pointer hover:bg-stone-50 transition-colors"
+                        onClick={()=>setExpanded(isExp?null:b.id)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-stone-700 text-sm font-semibold leading-snug">{b.title}</p>
+                            {b.type!=="book"&&(
+                              <span className="text-xs bg-stone-100 text-stone-400 px-1.5 py-0.5 rounded-md shrink-0">{b.type}</span>
+                            )}
+                          </div>
+                          {b.author&&<p className="text-stone-400 text-xs mt-0.5">{b.author}</p>}
+
+                          {/* Progress bar */}
+                          {showBar&&(
+                            <div className="mt-2">
+                              <div className="flex justify-between mb-1">
+                                {hasPg&&<span className="text-stone-400 text-xs">{curPg} / {b.total_pages} hal</span>}
+                                {hasCh&&<span className="text-stone-400 text-xs">{curCh} / {b.total_chapters} bab</span>}
+                                <span className="text-violet-500 text-xs font-semibold">{Math.round(pct)}%</span>
+                              </div>
+                              <div className="bg-stone-100 rounded-full h-1.5 overflow-hidden">
+                                <motion.div animate={{width:`${pct}%`}} transition={{duration:0.5}}
+                                  className="h-full bg-violet-500 rounded-full"/>
+                              </div>
+                            </div>
+                          )}
+
+                          {(b.insights??[]).length>0&&(
+                            <p className="text-stone-400 text-xs mt-1.5">
+                              💡 {(b.insights??[]).length} insight
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Quick actions */}
+                        <div className="flex gap-1 shrink-0" onClick={e=>e.stopPropagation()}>
+                          <span className="text-stone-300 text-xs self-center pr-1">{isExp?"▲":"▼"}</span>
+                          <Btn onClick={()=>del(b.id)} variant="ghost" small>✕</Btn>
+                        </div>
+                      </div>
+
+                      {/* ── Expanded panel ── */}
+                      <AnimatePresence>
+                        {isExp&&(
+                          <motion.div
+                            initial={{height:0,opacity:0}}
+                            animate={{height:"auto",opacity:1}}
+                            exit={{height:0,opacity:0}}
+                            transition={{duration:0.22}}
+                            className="border-t border-stone-100 bg-stone-50/50 px-4 py-4 space-y-5 overflow-hidden"
+                          >
+
+                            {/* ── Ubah Status ── */}
+                            <div>
+                              <p className="text-stone-500 text-xs font-semibold mb-2">Status</p>
+                              <div className="flex gap-1.5 flex-wrap">
+                                {(["want","reading","done","dropped"] as BookEntry["status"][]).map(ns=>(
+                                  <button
+                                    key={ns}
+                                    onClick={()=>changeStatus(b,ns)}
+                                    className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition-colors ${
+                                      b.status===ns
+                                        ? `${statusColor(ns)} ring-1 ring-current`
+                                        : "bg-stone-100 text-stone-400 hover:bg-stone-200"
+                                    }`}
+                                  >{ns}</button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* ── Halaman & Bab dibaca ── */}
+                            {(hasPg||hasCh)&&b.type!=="article"&&(
+                              <div>
+                                <p className="text-stone-500 text-xs font-semibold mb-2">Halaman / Bab Dibaca</p>
+                                <div className="flex gap-2 flex-wrap items-end">
+                                  {hasPg&&(
+                                    <div>
+                                      <p className="text-stone-400 text-xs mb-1">Halaman</p>
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="number"
+                                          value={pageVal[b.id] ?? String(b.current_page??0)}
+                                          onChange={e=>setPageVal(v=>({...v,[b.id]:e.target.value}))}
+                                          className="w-20 bg-white border border-stone-200 focus:border-violet-400 rounded-xl px-3 py-2 text-sm text-stone-800 outline-none"
+                                        />
+                                        <span className="text-stone-400 text-xs">/ {b.total_pages}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {hasCh&&(
+                                    <div>
+                                      <p className="text-stone-400 text-xs mb-1">Bab</p>
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="number"
+                                          value={chapVal[b.id] ?? String(b.current_chapter??0)}
+                                          onChange={e=>setChapVal(v=>({...v,[b.id]:e.target.value}))}
+                                          className="w-20 bg-white border border-stone-200 focus:border-violet-400 rounded-xl px-3 py-2 text-sm text-stone-800 outline-none"
+                                        />
+                                        <span className="text-stone-400 text-xs">/ {b.total_chapters}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  <Btn onClick={()=>saveProgress(b)} variant="secondary" small>
+                                    Simpan
+                                  </Btn>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ── Insight & Catatan ── */}
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-stone-500 text-xs font-semibold">💡 Insight & Catatan</p>
+                                <button
+                                  onClick={()=>setInsightingId(insightingId===b.id?null:b.id)}
+                                  className="text-violet-500 text-xs font-medium hover:text-violet-700"
+                                >+ Tambah</button>
+                              </div>
+                              {insightingId===b.id&&(
+                                <div className="flex gap-2 mb-2">
+                                  <textarea
+                                    value={insightText}
+                                    onChange={e=>setInsightText(e.target.value)}
+                                    placeholder="Tulis insight, quote penting, atau catatan bab..."
+                                    rows={2}
+                                    className="flex-1 bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-700 placeholder-stone-300 outline-none resize-none"
+                                  />
+                                  <div className="flex flex-col gap-1">
+                                    <Btn onClick={()=>addInsight(b)} small>✓</Btn>
+                                    <Btn onClick={()=>setInsightingId(null)} variant="ghost" small>✕</Btn>
+                                  </div>
+                                </div>
+                              )}
+                              {(b.insights??[]).length===0&&insightingId!==b.id&&(
+                                <p className="text-stone-300 text-xs">Belum ada insight.</p>
+                              )}
+                              <div className="space-y-1.5">
+                                {(b.insights??[]).map((ins,idx)=>(
+                                  <div key={idx}
+                                    className="flex items-start gap-2 bg-white rounded-xl p-2.5 border border-stone-100 group">
+                                    <span className="text-violet-400 text-xs mt-0.5 shrink-0">💡</span>
+                                    <p className="text-stone-600 text-xs leading-relaxed flex-1">{ins}</p>
+                                    <button
+                                      onClick={()=>removeInsight(b,idx)}
+                                      className="text-stone-200 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                                    >✕</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* ── Review ── */}
+                            <div>
+                              <p className="text-stone-500 text-xs font-semibold mb-2">📝 Review</p>
+                              {b.review&&reviewingId!==b.id&&(
+                                <div className="bg-white rounded-xl p-3 border border-stone-100 mb-2">
+                                  <p className="text-stone-600 text-xs leading-relaxed italic">"{b.review}"</p>
+                                  <button
+                                    onClick={()=>{ setReviewingId(b.id); setReviewText(b.review??""); }}
+                                    className="text-violet-400 text-xs mt-1 hover:text-violet-600"
+                                  >Edit</button>
+                                </div>
+                              )}
+                              {reviewingId===b.id&&(
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={reviewText}
+                                    onChange={e=>setReviewText(e.target.value)}
+                                    placeholder="Tulis review, rating, atau kesimpulan..." rows={3}
+                                    className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-700 placeholder-stone-300 outline-none resize-none"
+                                  />
+                                  <div className="flex gap-2">
+                                    <Btn onClick={()=>saveReview(b)} small>Simpan Review</Btn>
+                                    <Btn onClick={()=>setReviewingId(null)} variant="ghost" small>Batal</Btn>
+                                  </div>
+                                </div>
+                              )}
+                              {!b.review&&reviewingId!==b.id&&(
+                                <button
+                                  onClick={()=>{ setReviewingId(b.id); setReviewText(""); }}
+                                  className="text-stone-300 text-xs hover:text-violet-400 transition-colors"
+                                >+ Tulis review</button>
+                              )}
+                            </div>
+
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          );
+        })
+      }
     </div>
   );
 }
