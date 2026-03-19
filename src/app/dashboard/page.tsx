@@ -13,7 +13,7 @@ type Module =
   | "home" | "quest" | "mission" | "battle" | "skill"
   | "habit" | "finance" | "sleep" | "mental" | "social"
   | "pmo" | "school" | "book" | "anime" | "job"
-  | "stock" | "crypto" | "buy" | "evaluation" | "ai";
+  | "stock" | "crypto" | "buy" | "evaluation" | "ai" | "prinsip" | "project";
 
 type StatKey = "vitality"|"focus"|"intelligence"|"discipline"|"social"|"wealth"|"willpower";
 
@@ -34,7 +34,7 @@ interface PmoData { id:string; current_day:number; streak_start:string; is_broke
 interface SocialLink { id:string; name:string; level:number; last_interaction?:string; total_interactions:number; }
 interface SocialLog { id:string; link_id:string; link_name:string; type:string; topic:string; note?:string; date:string; }
 interface SchoolItem { id:string; type:"assignment"|"exam"|"goal"|"note"; title:string; due?:string; status:"todo"|"done"; subject?:string; content?:string; }
-interface BookEntry { id:string; title:string; author?:string; type:"book"|"article"|"paper"; status:"want"|"reading"|"done"|"dropped"; review?:string; total_pages?:number; current_page?:number; total_chapters?:number; current_chapter?:number; insights:string[]; }
+interface BookEntry { id:string; title:string; author?:string; type:"book"|"article"|"paper"; status:"want"|"reading"|"done"|"dropped"; reviews:string[]; total_pages?:number; current_page?:number; total_chapters?:number; current_chapter?:number; insights:string[]; }
 interface AnimeEntry { id:string; title:string; type:"anime"|"manga"; status:"watching"|"reading"|"onhold"|"completed"|"dropped"|"plan"; progress:number; total?:number; }
 interface JobEntry { id:string; company:string; position:string; status:"applied"|"screening"|"interview"|"offer"|"accepted"|"rejected"; applied_at:string; note?:string; }
 interface StockEntry { id:string; ticker:string; name:string; type:"stock"|"bond"|"money_market"; buy_price:number; current_price:number; qty:number; note?:string; }
@@ -62,6 +62,8 @@ const STAT_META:{key:StatKey;icon:string;color:string}[] = [
 const NAV:{id:Module;label:string;icon:string;group:string}[] = [
   {id:"home",       label:"Home",        icon:"◈",  group:"core"},
   {id:"ai",         label:"AI Core",     icon:"◉",  group:"core"},
+  {id:"prinsip",    label:"Prinsip",     icon:"☯",  group:"core"},
+  {id:"project",    label:"Project",     icon:"⊞",  group:"core"},
   {id:"quest",      label:"Quest",       icon:"◎",  group:"rpg"},
   {id:"mission",    label:"Mission",     icon:"⊕",  group:"rpg"},
   {id:"battle",     label:"Battle",      icon:"⚔",  group:"rpg"},
@@ -1450,6 +1452,16 @@ function SocialView({uid}:{uid:string}) {
     setLogs(p=>[{id:Date.now().toString(),link_id:selected.id,link_name:selected.name,type:logType,topic:logTopic.trim(),note:logNote,date:today()},...p]);
     setSelected(null); setLogTopic(""); setLogNote(""); setLogging(false);
   }
+  async function delLink(id:string){
+    if(await apiDelete(id,uid)){
+      setLinks(p=>p.filter(x=>x.id!==id));
+      setLogs(p=>p.filter(x=>x.link_id!==id));
+      if(selected?.id===id) setSelected(null);
+    }
+  }
+  async function delLog(id:string){
+    if(await apiDelete(id,uid)) setLogs(p=>p.filter(x=>x.id!==id));
+  }
 
   return (
     <div className="space-y-5">
@@ -1484,7 +1496,7 @@ function SocialView({uid}:{uid:string}) {
         <h3 className="font-bold text-stone-800 text-sm mb-3">Social Links</h3>
         <div className="space-y-2">
           {links.sort((a,b)=>b.total_interactions-a.total_interactions).map(l=>(
-            <div key={l.id} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0">
+            <div key={l.id} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0 group">
               <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
                 <span className="text-violet-600 text-xs font-bold">{l.name[0]?.toUpperCase()}</span>
               </div>
@@ -1492,7 +1504,10 @@ function SocialView({uid}:{uid:string}) {
                 <p className="text-stone-700 text-sm font-medium">{l.name}</p>
                 <p className="text-stone-400 text-xs">Lv {l.level} · {l.total_interactions} interaksi{l.last_interaction?` · ${l.last_interaction}`:""}</p>
               </div>
-              <Btn onClick={()=>setSelected(l)} variant="secondary" small>+ Log</Btn>
+              <div className="flex gap-1 shrink-0">
+                <Btn onClick={()=>setSelected(l)} variant="secondary" small>+ Log</Btn>
+                <Btn onClick={()=>delLink(l.id)} variant="ghost" small>✕</Btn>
+              </div>
             </div>
           ))}
         </div>
@@ -1503,12 +1518,14 @@ function SocialView({uid}:{uid:string}) {
           <h3 className="font-bold text-stone-800 text-sm mb-3">Log Terbaru</h3>
           <div className="space-y-2">
             {logs.slice(0,10).map(l=>(
-              <div key={l.id} className="py-2 border-b border-stone-100 last:border-0">
+              <div key={l.id} className="py-2 border-b border-stone-100 last:border-0 group">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-stone-700 text-sm font-medium">{l.link_name}</span>
                   <span className="text-stone-300 text-xs">·</span>
                   <span className="text-stone-400 text-xs">{l.type}</span>
                   <span className="text-stone-300 text-xs ml-auto">{l.date}</span>
+                  <button onClick={()=>delLog(l.id)}
+                    className="text-stone-200 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition-all">✕</button>
                 </div>
                 <p className="text-stone-500 text-xs">{l.topic}{l.note?` — ${l.note}`:""}</p>
               </div>
@@ -1633,6 +1650,8 @@ function BookView({uid}:{uid:string}) {
   const [insightingId,setInsightingId] = useState<string|null>(null);
   const [reviewText,setReviewText]     = useState("");
   const [reviewingId,setReviewingId]   = useState<string|null>(null);
+  const [editingReviewIdx,setEditingReviewIdx] = useState<number|null>(null);
+  const [editReviewText,setEditReviewText]     = useState("");
 
   const load = useCallback(async()=>{
     setLoading(true);
@@ -1643,7 +1662,7 @@ function BookView({uid}:{uid:string}) {
       author:         r.data.author   as string|undefined,
       type:           (r.data.type    ?? "book")  as BookEntry["type"],
       status:         (r.data.status  ?? "want")  as BookEntry["status"],
-      review:         r.data.review   as string|undefined,
+      reviews:        (r.data.reviews as string[])||[],
       total_pages:    r.data.total_pages    as number|undefined,
       current_page:   r.data.current_page   as number|undefined,
       total_chapters: r.data.total_chapters as number|undefined,
@@ -1662,14 +1681,14 @@ function BookView({uid}:{uid:string}) {
       title:title.trim(), author:author.trim()||null, type:bType, status:bStatus,
       total_pages:    totPages ? Number(totPages) : null,
       total_chapters: totChaps ? Number(totChaps) : null,
-      current_page:0, current_chapter:0, insights:[],
+      current_page:0, current_chapter:0, insights:[], reviews:[],
     },3);
     if(row) setBooks(p=>[{
       id:row.id, title:title.trim(), author:author.trim()||undefined,
       type:bType, status:bStatus,
       total_pages:    totPages ? Number(totPages) : undefined,
       total_chapters: totChaps ? Number(totChaps) : undefined,
-      current_page:0, current_chapter:0, insights:[],
+      current_page:0, current_chapter:0, insights:[], reviews:[],
     },...p]);
     setTitle(""); setAuthor(""); setTotPages(""); setTotChaps("");
     setAdding(false);
@@ -1716,10 +1735,24 @@ function BookView({uid}:{uid:string}) {
   }
 
   // ── REVIEW ────────────────────────────────────────────────
-  async function saveReview(b:BookEntry){
-    await apiPatch(b.id,uid,"update",{...b,review:reviewText.trim()});
-    setBooks(p=>p.map(x=>x.id===b.id?{...x,review:reviewText.trim()}:x));
+  async function addReview(b:BookEntry){
+    if(!reviewText.trim()) return;
+    const nr=[...(b.reviews??[]), reviewText.trim()];
+    await apiPatch(b.id,uid,"update",{...b,reviews:nr});
+    setBooks(p=>p.map(x=>x.id===b.id?{...x,reviews:nr}:x));
     setReviewingId(null); setReviewText("");
+  }
+  async function editReview(b:BookEntry,idx:number){
+    if(!editReviewText.trim()) return;
+    const nr=(b.reviews??[]).map((r,i)=>i===idx?editReviewText.trim():r);
+    await apiPatch(b.id,uid,"update",{...b,reviews:nr});
+    setBooks(p=>p.map(x=>x.id===b.id?{...x,reviews:nr}:x));
+    setEditingReviewIdx(null); setEditReviewText("");
+  }
+  async function removeReview(b:BookEntry,idx:number){
+    const nr=(b.reviews??[]).filter((_,i)=>i!==idx);
+    await apiPatch(b.id,uid,"update",{...b,reviews:nr});
+    setBooks(p=>p.map(x=>x.id===b.id?{...x,reviews:nr}:x));
   }
 
   async function del(id:string){
@@ -1967,35 +2000,69 @@ function BookView({uid}:{uid:string}) {
 
                             {/* ── Review ── */}
                             <div>
-                              <p className="text-stone-500 text-xs font-semibold mb-2">📝 Review</p>
-                              {b.review&&reviewingId!==b.id&&(
-                                <div className="bg-white rounded-xl p-3 border border-stone-100 mb-2">
-                                  <p className="text-stone-600 text-xs leading-relaxed italic">"{b.review}"</p>
-                                  <button
-                                    onClick={()=>{ setReviewingId(b.id); setReviewText(b.review??""); }}
-                                    className="text-violet-400 text-xs mt-1 hover:text-violet-600"
-                                  >Edit</button>
-                                </div>
-                              )}
-                              {reviewingId===b.id&&(
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-stone-500 text-xs font-semibold">📝 Review</p>
+                                <button
+                                  onClick={()=>{ setReviewingId(reviewingId===b.id?null:b.id); setReviewText(""); setEditingReviewIdx(null); }}
+                                  className="text-violet-500 text-xs font-medium hover:text-violet-700"
+                                >+ Tambah</button>
+                              </div>
+
+                              {/* List reviews */}
+                              <div className="space-y-2 mb-2">
+                                {(b.reviews??[]).map((rv,idx)=>(
+                                  <div key={idx} className="bg-white rounded-xl border border-stone-100 p-3 group">
+                                    {editingReviewIdx===idx&&reviewingId===b.id?(
+                                      <div className="space-y-2">
+                                        <textarea
+                                          value={editReviewText}
+                                          onChange={e=>setEditReviewText(e.target.value)}
+                                          rows={3}
+                                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-700 outline-none resize-none"
+                                        />
+                                        <div className="flex gap-2">
+                                          <Btn onClick={()=>editReview(b,idx)} small>Simpan</Btn>
+                                          <Btn onClick={()=>{ setEditingReviewIdx(null); setEditReviewText(""); }} variant="ghost" small>Batal</Btn>
+                                        </div>
+                                      </div>
+                                    ):(
+                                      <div className="flex items-start gap-2">
+                                        <p className="text-stone-600 text-xs leading-relaxed flex-1 italic">"{rv}"</p>
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                                          <button
+                                            onClick={()=>{ setReviewingId(b.id); setEditingReviewIdx(idx); setEditReviewText(rv); }}
+                                            className="text-stone-300 hover:text-violet-400 text-xs"
+                                          >✎</button>
+                                          <button
+                                            onClick={()=>removeReview(b,idx)}
+                                            className="text-stone-300 hover:text-red-400 text-xs"
+                                          >✕</button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Add new review form */}
+                              {reviewingId===b.id&&editingReviewIdx===null&&(
                                 <div className="space-y-2">
                                   <textarea
                                     value={reviewText}
                                     onChange={e=>setReviewText(e.target.value)}
-                                    placeholder="Tulis review, rating, atau kesimpulan..." rows={3}
-                                    className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-700 placeholder-stone-300 outline-none resize-none"
+                                    placeholder="Tulis review baru, quote, atau catatan akhir..."
+                                    rows={3}
+                                    className="w-full bg-white border border-stone-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 rounded-xl px-3 py-2.5 text-xs text-stone-700 placeholder-stone-300 outline-none resize-none"
                                   />
                                   <div className="flex gap-2">
-                                    <Btn onClick={()=>saveReview(b)} small>Simpan Review</Btn>
-                                    <Btn onClick={()=>setReviewingId(null)} variant="ghost" small>Batal</Btn>
+                                    <Btn onClick={()=>addReview(b)} small>Simpan</Btn>
+                                    <Btn onClick={()=>{ setReviewingId(null); setReviewText(""); }} variant="ghost" small>Batal</Btn>
                                   </div>
                                 </div>
                               )}
-                              {!b.review&&reviewingId!==b.id&&(
-                                <button
-                                  onClick={()=>{ setReviewingId(b.id); setReviewText(""); }}
-                                  className="text-stone-300 text-xs hover:text-violet-400 transition-colors"
-                                >+ Tulis review</button>
+
+                              {(b.reviews??[]).length===0&&reviewingId!==b.id&&(
+                                <p className="text-stone-300 text-xs">Belum ada review.</p>
                               )}
                             </div>
 
@@ -2585,6 +2652,600 @@ function EvalView({uid}:{uid:string}) {
 }
 
 // ════════════════════════════════════════════════════════════
+// PRINSIP
+// ════════════════════════════════════════════════════════════
+interface PrinsipEntry { id:string; title:string; body:string; category:string; pinned:boolean; }
+
+function PrinsipView({uid}:{uid:string}) {
+  const [entries,setEntries] = useState<PrinsipEntry[]>([]);
+  const [loading,setLoading] = useState(true);
+  const [title,setTitle]     = useState("");
+  const [body,setBody]       = useState("");
+  const [category,setCategory] = useState("hidup");
+  const [adding,setAdding]   = useState(false);
+  const [editingId,setEditingId] = useState<string|null>(null);
+  const [editTitle,setEditTitle] = useState("");
+  const [editBody,setEditBody]   = useState("");
+  const [filterCat,setFilterCat] = useState("semua");
+
+  const CATEGORIES = ["hidup","kerja","mindset","relasi","keuangan","kesehatan","lainnya"];
+
+  const load = useCallback(async()=>{
+    setLoading(true);
+    const rows = await apiGet(uid,"evaluation",200);
+    // Prinsip disimpan di module "evaluation" dengan linked_module="prinsip"
+    setEntries(
+      rows
+        .filter(r=>r.data.linked_module==="prinsip")
+        .map(r=>({
+          id:r.id,
+          title:String(r.data.title??""),
+          body:String(r.data.content??""),
+          category:String(r.data.category??"lainnya"),
+          pinned:Boolean(r.data.pinned??false),
+        }))
+    );
+    setLoading(false);
+  },[uid]);
+  useEffect(()=>{ load(); },[load]);
+
+  async function add(){
+    if(!title.trim()||!body.trim()) return;
+    setAdding(true);
+    const row = await apiPost(uid,"evaluation","create",{
+      period:"daily",
+      title:title.trim(),
+      content:body.trim(),
+      category,
+      pinned:false,
+      linked_module:"prinsip",
+      date:today(),
+    },5);
+    if(row) setEntries(p=>[{
+      id:row.id,title:title.trim(),body:body.trim(),category,pinned:false,
+    },...p]);
+    setTitle(""); setBody(""); setAdding(false);
+  }
+
+  async function togglePin(e:PrinsipEntry){
+    await apiPatch(e.id,uid,"update",{
+      period:"daily",title:e.title,content:e.body,
+      category:e.category,pinned:!e.pinned,linked_module:"prinsip",date:today(),
+    });
+    setEntries(p=>p.map(x=>x.id===e.id?{...x,pinned:!x.pinned}:x));
+  }
+
+  async function saveEdit(e:PrinsipEntry){
+    if(!editTitle.trim()||!editBody.trim()) return;
+    await apiPatch(e.id,uid,"update",{
+      period:"daily",title:editTitle.trim(),content:editBody.trim(),
+      category:e.category,pinned:e.pinned,linked_module:"prinsip",date:today(),
+    });
+    setEntries(p=>p.map(x=>x.id===e.id?{...x,title:editTitle.trim(),body:editBody.trim()}:x));
+    setEditingId(null);
+  }
+
+  async function del(id:string){
+    if(await apiDelete(id,uid)) setEntries(p=>p.filter(x=>x.id!==id));
+  }
+
+  const pinned   = entries.filter(e=>e.pinned);
+  const unpinned = entries.filter(e=>!e.pinned);
+  const allCats  = ["semua",...CATEGORIES];
+  const filtered = (filterCat==="semua"?unpinned:unpinned.filter(e=>e.category===filterCat));
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── Add form ── */}
+      <Card>
+        <h3 className="font-bold text-stone-800 text-sm mb-3">Prinsip Baru</h3>
+        <div className="space-y-2">
+          <Input value={title} onChange={setTitle} placeholder="Judul prinsip (singkat, kuat)..."/>
+          <textarea
+            value={body} onChange={e=>setBody(e.target.value)}
+            placeholder="Tulis prinsip, reminder, atau kata-kata yang ingin selalu kamu ingat..." rows={3}
+            className="w-full bg-stone-50 border border-stone-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 rounded-xl px-4 py-3 text-sm text-stone-700 placeholder-stone-300 outline-none resize-none"
+          />
+          <div className="flex gap-2">
+            <select value={category} onChange={e=>setCategory(e.target.value)}
+              className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-600 outline-none">
+              {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+            <Btn onClick={add} disabled={adding||!title.trim()||!body.trim()}>
+              {adding?"...":"+ Tambah"}
+            </Btn>
+          </div>
+        </div>
+      </Card>
+
+      {/* ── Pinned ── */}
+      {pinned.length>0&&(
+        <div className="space-y-2">
+          <p className="text-stone-400 text-xs font-semibold uppercase tracking-wider px-1">📌 Pinned</p>
+          {pinned.map(e=>(
+            <PrinsipCard key={e.id} e={e}
+              editingId={editingId} editTitle={editTitle} editBody={editBody}
+              setEditingId={setEditingId} setEditTitle={setEditTitle} setEditBody={setEditBody}
+              onTogglePin={togglePin} onSaveEdit={saveEdit} onDel={del}/>
+          ))}
+        </div>
+      )}
+
+      {/* ── Filter tabs ── */}
+      {entries.length>0&&(
+        <div className="flex gap-1.5 flex-wrap">
+          {allCats.map(c=>(
+            <button key={c} onClick={()=>setFilterCat(c)}
+              className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition-colors capitalize ${
+                filterCat===c?"bg-violet-600 text-white":"bg-stone-100 text-stone-400 hover:bg-stone-200"
+              }`}>{c}</button>
+          ))}
+        </div>
+      )}
+
+      {/* ── List ── */}
+      {loading?<Sk cls="h-40"/>:filtered.length===0&&pinned.length===0?
+        <Empty icon="☯" text="Belum ada prinsip. Tulis satu hal yang ingin selalu kamu ingat."/>
+      :filtered.length===0?null
+      :(
+        <div className="space-y-3">
+          {filtered.map(e=>(
+            <PrinsipCard key={e.id} e={e}
+              editingId={editingId} editTitle={editTitle} editBody={editBody}
+              setEditingId={setEditingId} setEditTitle={setEditTitle} setEditBody={setEditBody}
+              onTogglePin={togglePin} onSaveEdit={saveEdit} onDel={del}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PrinsipCard({e,editingId,editTitle,editBody,setEditingId,setEditTitle,setEditBody,onTogglePin,onSaveEdit,onDel}:{
+  e:PrinsipEntry;
+  editingId:string|null; editTitle:string; editBody:string;
+  setEditingId:(v:string|null)=>void; setEditTitle:(v:string)=>void; setEditBody:(v:string)=>void;
+  onTogglePin:(e:PrinsipEntry)=>void;
+  onSaveEdit:(e:PrinsipEntry)=>void;
+  onDel:(id:string)=>void;
+}) {
+  const isEditing = editingId===e.id;
+  return (
+    <motion.div
+      layout
+      initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
+      className={`rounded-2xl border overflow-hidden ${e.pinned?"border-violet-200 bg-violet-50/60":"border-stone-200/80 bg-white"}`}
+    >
+      {isEditing?(
+        <div className="p-4 space-y-2">
+          <input value={editTitle} onChange={e2=>setEditTitle(e2.target.value)}
+            className="w-full bg-white border border-stone-200 focus:border-violet-400 rounded-xl px-3 py-2 text-sm font-semibold text-stone-800 outline-none"/>
+          <textarea value={editBody} onChange={e2=>setEditBody(e2.target.value)} rows={3}
+            className="w-full bg-white border border-stone-200 focus:border-violet-400 rounded-xl px-3 py-2 text-sm text-stone-700 outline-none resize-none"/>
+          <div className="flex gap-2">
+            <button onClick={()=>onSaveEdit(e)}
+              className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">
+              Simpan
+            </button>
+            <button onClick={()=>setEditingId(null)}
+              className="text-stone-400 hover:text-stone-600 text-xs px-3 py-2 rounded-xl hover:bg-stone-100 transition-colors">
+              Batal
+            </button>
+          </div>
+        </div>
+      ):(
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <p className={`text-sm font-bold ${e.pinned?"text-violet-800":"text-stone-800"}`}>{e.title}</p>
+                <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
+                  e.pinned?"bg-violet-200 text-violet-600":"bg-stone-100 text-stone-400"
+                }`}>{e.category}</span>
+              </div>
+              <p className={`text-sm leading-relaxed ${e.pinned?"text-violet-700":"text-stone-600"}`}>{e.body}</p>
+            </div>
+            <div className="flex gap-1 shrink-0">
+              <button onClick={()=>onTogglePin(e)}
+                className={`text-sm px-1.5 py-1 rounded-lg transition-colors ${
+                  e.pinned?"text-violet-400 hover:text-violet-600":"text-stone-300 hover:text-violet-400"
+                }`}
+                title={e.pinned?"Unpin":"Pin"}
+              >📌</button>
+              <button onClick={()=>{ setEditingId(e.id); setEditTitle(e.title); setEditBody(e.body); }}
+                className="text-stone-300 hover:text-violet-400 text-xs px-1.5 py-1 rounded-lg transition-colors">✎</button>
+              <button onClick={()=>onDel(e.id)}
+                className="text-stone-300 hover:text-red-400 text-xs px-1.5 py-1 rounded-lg transition-colors">✕</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// PROJECT
+// ════════════════════════════════════════════════════════════
+interface ProjectEntry {
+  id: string;
+  title: string;
+  description?: string;
+  status: "plan"|"progress"|"complete"|"failed";
+  category?: string;
+  deadline?: string;
+  tasks: string[];
+  created_at_display: string;
+}
+
+const PROJECT_STATUS_COLORS:{[k:string]:string} = {
+  plan:     "bg-stone-100 text-stone-500",
+  progress: "bg-violet-100 text-violet-600",
+  complete: "bg-emerald-100 text-emerald-600",
+  failed:   "bg-red-100 text-red-400",
+};
+
+const PROJECT_STATUS_DOT:{[k:string]:string} = {
+  plan:     "bg-stone-300",
+  progress: "bg-violet-500",
+  complete: "bg-emerald-500",
+  failed:   "bg-red-400",
+};
+
+function ProjectView({uid}:{uid:string}) {
+  const [projects,setProjects]   = useState<ProjectEntry[]>([]);
+  const [loading,setLoading]     = useState(true);
+  const [expanded,setExpanded]   = useState<string|null>(null);
+  const [filter,setFilter]       = useState<"all"|ProjectEntry["status"]>("all");
+
+  // add form
+  const [pTitle,setPTitle]       = useState("");
+  const [pDesc,setPDesc]         = useState("");
+  const [pCat,setPCat]           = useState("");
+  const [pDeadline,setPDeadline] = useState("");
+  const [adding,setAdding]       = useState(false);
+
+  // edit
+  const [editingId,setEditingId]   = useState<string|null>(null);
+  const [editTitle,setEditTitle]   = useState("");
+  const [editDesc,setEditDesc]     = useState("");
+  const [editCat,setEditCat]       = useState("");
+  const [editDeadline,setEditDeadline] = useState("");
+
+  // task input per project
+  const [taskInput,setTaskInput] = useState<Record<string,string>>({});
+
+  const load = useCallback(async()=>{
+    setLoading(true);
+    // simpan di module "mission" dengan linked_module="project"
+    const rows = await apiGet(uid,"mission",200);
+    setProjects(
+      rows
+        .filter(r=>r.data.linked_module==="project")
+        .map(r=>({
+          id:r.id,
+          title:String(r.data.title??""),
+          description:r.data.description as string|undefined,
+          status:(r.data.status??"plan") as ProjectEntry["status"],
+          category:r.data.category as string|undefined,
+          deadline:r.data.deadline as string|undefined,
+          tasks:(r.data.tasks as string[])||[],
+          created_at_display:String(r.created_at?.slice(0,10)??""),
+        }))
+    );
+    setLoading(false);
+  },[uid]);
+  useEffect(()=>{ load(); },[load]);
+
+  // ── ADD ──────────────────────────────────────────────────
+  async function add(){
+    if(!pTitle.trim()) return;
+    setAdding(true);
+    const row = await apiPost(uid,"mission","create",{
+      title:pTitle.trim(),
+      description:pDesc.trim()||null,
+      status:"plan",
+      category:pCat.trim()||null,
+      deadline:pDeadline||null,
+      tasks:[],
+      linked_module:"project",
+      quest_count:0,
+    },5);
+    if(row) setProjects(p=>[{
+      id:row.id,title:pTitle.trim(),description:pDesc.trim()||undefined,
+      status:"plan",category:pCat.trim()||undefined,
+      deadline:pDeadline||undefined,tasks:[],
+      created_at_display:today(),
+    },...p]);
+    setPTitle(""); setPDesc(""); setPCat(""); setPDeadline("");
+    setAdding(false);
+  }
+
+  // ── STATUS ────────────────────────────────────────────────
+  async function changeStatus(p:ProjectEntry,ns:ProjectEntry["status"]){
+    await apiPatch(p.id,uid,ns==="complete"?"complete":ns==="failed"?"fail":"update",{
+      title:p.title,description:p.description,status:ns,
+      category:p.category,deadline:p.deadline,tasks:p.tasks,
+      linked_module:"project",quest_count:0,
+    });
+    setProjects(prev=>prev.map(x=>x.id===p.id?{...x,status:ns}:x));
+  }
+
+  // ── EDIT ─────────────────────────────────────────────────
+  function startEdit(p:ProjectEntry){
+    setEditingId(p.id);
+    setEditTitle(p.title);
+    setEditDesc(p.description??"");
+    setEditCat(p.category??"");
+    setEditDeadline(p.deadline??"");
+  }
+  async function saveEdit(p:ProjectEntry){
+    if(!editTitle.trim()) return;
+    await apiPatch(p.id,uid,"update",{
+      title:editTitle.trim(),description:editDesc.trim()||null,
+      status:p.status,category:editCat.trim()||null,
+      deadline:editDeadline||null,tasks:p.tasks,
+      linked_module:"project",quest_count:0,
+    });
+    setProjects(prev=>prev.map(x=>x.id===p.id?{...x,
+      title:editTitle.trim(),description:editDesc.trim()||undefined,
+      category:editCat.trim()||undefined,deadline:editDeadline||undefined,
+    }:x));
+    setEditingId(null);
+  }
+
+  // ── TASKS ─────────────────────────────────────────────────
+  async function addTask(p:ProjectEntry){
+    const t=(taskInput[p.id]??"").trim();
+    if(!t) return;
+    const nt=[...p.tasks,t];
+    await apiPatch(p.id,uid,"update",{...p,tasks:nt,linked_module:"project",quest_count:0});
+    setProjects(prev=>prev.map(x=>x.id===p.id?{...x,tasks:nt}:x));
+    setTaskInput(v=>({...v,[p.id]:""}));
+  }
+  async function toggleTask(p:ProjectEntry,idx:number){
+    // prefix done tasks with ✓
+    const cur=p.tasks[idx];
+    const isDone=cur.startsWith("✓ ");
+    const updated=isDone?cur.slice(2):"✓ "+cur;
+    const nt=p.tasks.map((t,i)=>i===idx?updated:t);
+    await apiPatch(p.id,uid,"update",{...p,tasks:nt,linked_module:"project",quest_count:0});
+    setProjects(prev=>prev.map(x=>x.id===p.id?{...x,tasks:nt}:x));
+  }
+  async function removeTask(p:ProjectEntry,idx:number){
+    const nt=p.tasks.filter((_,i)=>i!==idx);
+    await apiPatch(p.id,uid,"update",{...p,tasks:nt,linked_module:"project",quest_count:0});
+    setProjects(prev=>prev.map(x=>x.id===p.id?{...x,tasks:nt}:x));
+  }
+
+  // ── DELETE ────────────────────────────────────────────────
+  async function del(id:string){
+    if(await apiDelete(id,uid)) setProjects(p=>p.filter(x=>x.id!==id));
+  }
+
+  const ALL_STATUS:ProjectEntry["status"][] = ["plan","progress","complete","failed"];
+  const filtered = filter==="all"?projects:projects.filter(p=>p.status===filter);
+  const counts:{[k:string]:number} = {all:projects.length};
+  ALL_STATUS.forEach(s=>{ counts[s]=projects.filter(p=>p.status===s).length; });
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── Add form ── */}
+      <Card>
+        <h3 className="font-bold text-stone-800 text-sm mb-3">Project Baru</h3>
+        <div className="space-y-2">
+          <Input value={pTitle} onChange={setPTitle} placeholder="Nama project..."
+            onKeyDown={e=>e.key==="Enter"&&add()}/>
+          <textarea value={pDesc} onChange={e=>setPDesc(e.target.value)}
+            placeholder="Deskripsi singkat (opsional)..." rows={2}
+            className="w-full bg-stone-50 border border-stone-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 rounded-xl px-4 py-2.5 text-sm text-stone-700 placeholder-stone-300 outline-none resize-none"/>
+          <div className="flex gap-2">
+            <Input value={pCat} onChange={setPCat} placeholder="Kategori..." className="flex-1"/>
+            <Input value={pDeadline} onChange={setPDeadline} type="date" className="flex-1"/>
+          </div>
+          <Btn onClick={add} disabled={adding||!pTitle.trim()} className="w-full">
+            {adding?"...":"+ Buat Project"}
+          </Btn>
+        </div>
+      </Card>
+
+      {/* ── Stats + Filter ── */}
+      {projects.length>0&&(
+        <div className="flex gap-1.5 flex-wrap">
+          {(["all",...ALL_STATUS] as const).map(s=>(
+            <button key={s} onClick={()=>setFilter(s as typeof filter)}
+              className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition-colors capitalize flex items-center gap-1.5 ${
+                filter===s?"bg-violet-600 text-white":"bg-stone-100 text-stone-500 hover:bg-stone-200"
+              }`}>
+              {s!=="all"&&<span className={`w-1.5 h-1.5 rounded-full shrink-0 ${filter===s?"bg-white":PROJECT_STATUS_DOT[s]}`}/>}
+              {s==="all"?"Semua":s}
+              <span className={`text-xs ${filter===s?"text-white/70":"text-stone-400"}`}>{counts[s]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Feed ── */}
+      {loading?<div className="space-y-3"><Sk cls="h-28"/><Sk cls="h-28"/><Sk cls="h-20"/></div>
+      :filtered.length===0?<Empty icon="⊞" text={filter==="all"?"Belum ada project.":`Tidak ada project dengan status ${filter}.`}/>
+      :(
+        <AnimatePresence mode="popLayout">
+          <div className="space-y-3">
+            {filtered.map(p=>{
+              const isExp=expanded===p.id;
+              const isEdit=editingId===p.id;
+              const doneTasks=p.tasks.filter(t=>t.startsWith("✓ ")).length;
+              const taskPct=p.tasks.length>0?Math.round((doneTasks/p.tasks.length)*100):0;
+              const dL=daysLeft(p.deadline);
+
+              return (
+                <motion.div key={p.id} layout
+                  initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,x:-8}}
+                  className="bg-white rounded-3xl border border-stone-200/80 overflow-hidden hover:shadow-md hover:shadow-stone-100/80 transition-shadow duration-200"
+                >
+                  {isEdit?(
+                    /* ── Edit mode ── */
+                    <div className="p-5 space-y-2">
+                      <input value={editTitle} onChange={e=>setEditTitle(e.target.value)}
+                        className="w-full bg-stone-50 border border-stone-200 focus:border-violet-400 rounded-xl px-4 py-2.5 text-sm font-bold text-stone-800 outline-none"/>
+                      <textarea value={editDesc} onChange={e=>setEditDesc(e.target.value)} rows={2}
+                        placeholder="Deskripsi..."
+                        className="w-full bg-stone-50 border border-stone-200 focus:border-violet-400 rounded-xl px-4 py-2.5 text-sm text-stone-700 placeholder-stone-300 outline-none resize-none"/>
+                      <div className="flex gap-2">
+                        <Input value={editCat} onChange={setEditCat} placeholder="Kategori" className="flex-1"/>
+                        <Input value={editDeadline} onChange={setEditDeadline} type="date" className="flex-1"/>
+                      </div>
+                      <div className="flex gap-2">
+                        <Btn onClick={()=>saveEdit(p)} small>Simpan</Btn>
+                        <Btn onClick={()=>setEditingId(null)} variant="ghost" small>Batal</Btn>
+                      </div>
+                    </div>
+                  ):(
+                    <>
+                      {/* ── Header ── */}
+                      <div className="p-5 cursor-pointer" onClick={()=>setExpanded(isExp?null:p.id)}>
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            {/* Status dot + title */}
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${PROJECT_STATUS_DOT[p.status]}`}/>
+                              <p className="text-stone-800 font-bold text-sm leading-snug">{p.title}</p>
+                              {p.category&&(
+                                <span className="text-xs bg-stone-100 text-stone-400 px-2 py-0.5 rounded-full">{p.category}</span>
+                              )}
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PROJECT_STATUS_COLORS[p.status]}`}>
+                                {p.status}
+                              </span>
+                            </div>
+
+                            {p.description&&(
+                              <p className="text-stone-400 text-xs leading-relaxed line-clamp-2 mb-2">{p.description}</p>
+                            )}
+
+                            {/* Meta row */}
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {p.deadline&&(
+                                <span className={`text-xs flex items-center gap-1 ${dL!==null&&dL<0?"text-red-400":dL!==null&&dL<3?"text-amber-500":"text-stone-400"}`}>
+                                  📅 {p.deadline}{dL!==null&&(dL<0?" · overdue":dL===0?" · hari ini":` · ${dL}d`)}
+                                </span>
+                              )}
+                              {p.tasks.length>0&&(
+                                <span className="text-stone-400 text-xs">✓ {doneTasks}/{p.tasks.length} task</span>
+                              )}
+                              <span className="text-stone-300 text-xs">{p.created_at_display}</span>
+                            </div>
+
+                            {/* Task progress bar */}
+                            {p.tasks.length>0&&(
+                              <div className="mt-2">
+                                <div className="bg-stone-100 rounded-full h-1 overflow-hidden">
+                                  <motion.div animate={{width:`${taskPct}%`}} transition={{duration:0.5}}
+                                    className={`h-full rounded-full ${p.status==="complete"?"bg-emerald-500":p.status==="failed"?"bg-red-400":"bg-violet-500"}`}/>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex gap-1 shrink-0" onClick={e=>e.stopPropagation()}>
+                            <span className="text-stone-300 text-xs self-start pt-0.5">{isExp?"▲":"▼"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── Expanded panel ── */}
+                      <AnimatePresence>
+                        {isExp&&(
+                          <motion.div
+                            initial={{height:0,opacity:0}}
+                            animate={{height:"auto",opacity:1}}
+                            exit={{height:0,opacity:0}}
+                            transition={{duration:0.22}}
+                            className="border-t border-stone-100 bg-stone-50/50 px-5 py-4 space-y-4 overflow-hidden"
+                          >
+                            {/* Status selector */}
+                            <div>
+                              <p className="text-stone-500 text-xs font-semibold mb-2">Status</p>
+                              <div className="flex gap-1.5 flex-wrap">
+                                {ALL_STATUS.map(ns=>(
+                                  <button key={ns} onClick={()=>changeStatus(p,ns)}
+                                    className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition-all flex items-center gap-1.5 ${
+                                      p.status===ns
+                                        ?`${PROJECT_STATUS_COLORS[ns]} ring-1 ring-current`
+                                        :"bg-stone-100 text-stone-400 hover:bg-stone-200"
+                                    }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${p.status===ns?PROJECT_STATUS_DOT[ns]:"bg-stone-300"}`}/>
+                                    {ns}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Tasks */}
+                            <div>
+                              <p className="text-stone-500 text-xs font-semibold mb-2">
+                                Checklist Task {p.tasks.length>0&&<span className="text-stone-300 font-normal">({doneTasks}/{p.tasks.length})</span>}
+                              </p>
+                              <div className="space-y-1.5 mb-2">
+                                {p.tasks.map((t,idx)=>{
+                                  const done=t.startsWith("✓ ");
+                                  const label=done?t.slice(2):t;
+                                  return(
+                                    <div key={idx} className="flex items-center gap-2 group">
+                                      <button onClick={()=>toggleTask(p,idx)}
+                                        className={`w-4 h-4 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${
+                                          done?"bg-violet-600 border-violet-600":"border-stone-300 hover:border-violet-400"
+                                        }`}>
+                                        {done&&<span className="text-white text-xs leading-none">✓</span>}
+                                      </button>
+                                      <span className={`text-xs flex-1 ${done?"line-through text-stone-300":"text-stone-600"}`}>{label}</span>
+                                      <button onClick={()=>removeTask(p,idx)}
+                                        className="text-stone-200 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition-all">✕</button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex gap-2">
+                                <input
+                                  value={taskInput[p.id]??""}
+                                  onChange={e=>setTaskInput(v=>({...v,[p.id]:e.target.value}))}
+                                  onKeyDown={e=>e.key==="Enter"&&addTask(p)}
+                                  placeholder="Tambah task... (Enter)"
+                                  className="flex-1 bg-white border border-stone-200 focus:border-violet-400 rounded-xl px-3 py-2 text-xs text-stone-700 placeholder-stone-300 outline-none"
+                                />
+                                <Btn onClick={()=>addTask(p)} variant="secondary" small>+</Btn>
+                              </div>
+                            </div>
+
+                            {/* Edit & Delete */}
+                            <div className="flex gap-2 pt-1 border-t border-stone-100">
+                              <button onClick={()=>startEdit(p)}
+                                className="text-stone-400 hover:text-violet-600 text-xs flex items-center gap-1 transition-colors">
+                                ✎ Edit project
+                              </button>
+                              <button onClick={()=>del(p.id)}
+                                className="text-stone-400 hover:text-red-400 text-xs flex items-center gap-1 transition-colors ml-auto">
+                                ✕ Hapus
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </>
+                  )}
+                </motion.div>
+              );
+            })}
+          </div>
+        </AnimatePresence>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 // AI CORE
 // ════════════════════════════════════════════════════════════
 function AiView({uid,userName}:{uid:string;userName:string}) {
@@ -2728,6 +3389,8 @@ export default function DashboardPage() {
       case "crypto":     return <CryptoView uid={userId}/>;
       case "buy":        return <BuyView uid={userId}/>;
       case "evaluation": return <EvalView uid={userId}/>;
+      case "prinsip":    return <PrinsipView uid={userId}/>;
+      case "project":    return <ProjectView uid={userId}/>;
       case "ai":         return <AiView uid={userId} userName={userName}/>;
       default:           return null;
     }
@@ -2867,7 +3530,7 @@ export default function DashboardPage() {
 
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-stone-200/60 flex items-center justify-around px-1 py-2 z-20">
-          {(["home","quest","habit","pmo","ai"] as Module[]).map(id=>{
+          {(["home","quest","project","prinsip","ai"] as Module[]).map(id=>{
             const item=NAV.find(n=>n.id===id)!; const active=activeModule===id;
             return(
               <button key={id} onClick={()=>navigate(id)}
